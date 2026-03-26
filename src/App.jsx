@@ -147,9 +147,9 @@ export default function App() {
   const [roomType, setRoomType] = useState("low");
 
   const [money,                setMoney]                = useStickyState(10000, "qw_money_v72");
-  const [userChips,            setUserChips]            = useStickyState(1000,    "qw_userChips_v72");
-  const [eyePoints,            setEyePoints]            = useStickyState(0,       "qw_eyePoints_v72");
-  const [assets,               setAssets]               = useStickyState({},      "qw_assets_v72");
+  const [userChips,            setUserChips]            = useStickyState(1000,    "qw_userChips_v721");
+  const [eyePoints,            setEyePoints]            = useStickyState(0,       "qw_eyePoints_v721");
+  const [assets,               setAssets]               = useStickyState({},      "qw_assets_v721");
   const [stats,                setStats]                = useStickyState(
     { totalWins: 0, highWins: 0, escapeCheats: 0, catchCheats: 0, maxChips: 2000 }, "qw_stats_v72"
   );
@@ -449,7 +449,7 @@ const doShowdown = useCallback((finalPot, finalChips, finalFolded, allComm, tabl
     return (
       <div style={{ minHeight: "100vh", background: "#0a0a0a", color: "#e8d5b0", padding: "15px 10px", fontFamily: "sans-serif", paddingBottom: 50 }}>
         <style>{CSS_ANIMATIONS}</style>
-        <h2 style={{ textAlign: "center", color: "#ffd700", margin: "0 0 15px 0" }}>至尊千王 V7.2</h2>
+        <h2 style={{ textAlign: "center", color: "#ffd700", margin: "0 0 15px 0" }}>赌神之路 V7.2.1</h2>
 
         {/* 资产栏 */}
         <div style={{ display: "flex", justifyContent: "space-between", background: "#1a1a1a", padding: 12, borderRadius: 8, marginBottom: 15 }}>
