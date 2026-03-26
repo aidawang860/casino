@@ -147,7 +147,7 @@ export default function App() {
   const [roomType, setRoomType] = useState("low");
 
   const [money,                setMoney]                = useStickyState(10000, "qw_money_v72");
-  const [userChips,            setUserChips]            = useStickyState(1000,    "qw_userChips_v721");
+  const [userChips,            setUserChips]            = useStickyState(1000,    "qw_userChips_v72");
   const [eyePoints,            setEyePoints]            = useStickyState(0,       "qw_eyePoints_v72");
   const [assets,               setAssets]               = useStickyState({},      "qw_assets_v72");
   const [stats,                setStats]                = useStickyState(
