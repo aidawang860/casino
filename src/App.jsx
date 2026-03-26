@@ -104,13 +104,114 @@ function createDeck() {
 
 function evaluateHand(hand, comm) {
   if (!hand || hand.length === 0) return 0;
-  const all = [...hand, ...comm]; const counts = {}; let maxRank = 0; let pairRank = 0;
-  all.forEach(c => {
-    const val = RANKS.indexOf(c.rank) + 2; counts[val] = (counts[val] || 0) + 1;
-    if (val > maxRank) maxRank = val;
-    if (counts[val] >= 2 && val > pairRank) pairRank = val;
+  const allCards = [...hand, ...comm];
+  
+  // 1. 将牌面转换为数字大小 (2-14)
+  const cards = allCards.map(c => ({
+    ...c,
+    val: RANKS.indexOf(c.rank) + 2
+  })).sort((a, b) => b.val - a.val);
+
+  // 2. 统计各点数和花色的出现次数
+  const rankCounts = {};
+  const suitCards = {};
+  cards.forEach(c => {
+    rankCounts[c.val] = (rankCounts[c.val] || 0) + 1;
+    if (!suitCards[c.suit]) suitCards[c.suit] = [];
+    suitCards[c.suit].push(c);
   });
-  return pairRank > 0 ? pairRank * 100 + maxRank : maxRank;
+
+  // 3. 寻找同花 (Flush) 及同花的所有牌 (✅ 修复了同花顺截断 Bug)
+  let flushCards = null;       // 用于普通的同花（取最大5张）
+  let flushSuitCards = null;   // 用于判断同花顺（保留该花色所有牌，防止错漏）
+  for (const suit in suitCards) {
+    if (suitCards[suit].length >= 5) {
+      flushSuitCards = suitCards[suit];
+      flushCards = suitCards[suit].slice(0, 5);
+      break;
+    }
+  }
+
+  // 4. 寻找顺子 (Straight) - 提取去重并排序的点数，并兼容 A-2-3-4-5
+  function getStraight(cardArray) {
+    const uniqueVals = [...new Set(cardArray.map(c => c.val))].sort((a, b) => b - a);
+    if (uniqueVals.includes(14)) uniqueVals.push(1); // A 可以当 1
+    for (let i = 0; i <= uniqueVals.length - 5; i++) {
+      // 只要相隔4个位置的数值差为4，就是顺子（因为已经去重并倒序排列）
+      if (uniqueVals[i] - uniqueVals[i + 4] === 4) {
+        return uniqueVals.slice(i, i + 5);
+      }
+    }
+    return null;
+  }
+  
+  const straightVals = getStraight(cards);
+  // 现在提取同花顺用的是 flushSuitCards（所有同花牌），而不是截断后的前5张
+  const straightFlushVals = flushSuitCards ? getStraight(flushSuitCards) : null;
+
+  // 5. 将点数按出现次数(降序)和点数大小(降序)进行排序，秒寻对子/三条/四条/葫芦
+  const groups = Object.entries(rankCounts)
+    .map(([val, count]) => ({ val: Number(val), count }))
+    .sort((a, b) => b.count !== a.count ? b.count - a.count : b.val - a.val);
+
+  // 6. 核心算分函数：牌型权重 + 5张关键牌的逐级权重
+  function calcScore(category, best5) {
+    let score = category * 1048576; // 赋予牌型不可逾越的基础分 (16^5)
+    for (let i = 0; i < 5; i++) {
+      const item = best5[i];
+      const val = item ? (typeof item === 'object' ? item.val : item) : 0;
+      score += val * Math.pow(16, 4 - i);
+    }
+    return score;
+  }
+
+  // === 🏆 开始终极判定 🏆 ===
+  
+  // 级别 10：皇家同花顺 (Royal Flush) - A, K, Q, J, 10 同花
+  if (straightFlushVals && straightFlushVals[0] === 14) {
+    return calcScore(10, straightFlushVals);
+  }
+  
+  // 级别 9：同花顺 (Straight Flush)
+  if (straightFlushVals) return calcScore(9, straightFlushVals);
+  
+  // 级别 8：四条/金刚 (Four of a Kind)
+  if (groups[0].count === 4) {
+    const kicker = cards.find(c => c.val !== groups[0].val);
+    return calcScore(8, [groups[0].val, groups[0].val, groups[0].val, groups[0].val, kicker]);
+  }
+  
+  // 级别 7：葫芦 (Full House)
+  if (groups[0].count === 3 && groups.length > 1 && groups[1].count >= 2) {
+    return calcScore(7, [groups[0].val, groups[0].val, groups[0].val, groups[1].val, groups[1].val]);
+  }
+  
+  // 级别 6：同花 (Flush)
+  if (flushCards) return calcScore(6, flushCards);
+  
+  // 级别 5：顺子 (Straight)
+  if (straightVals) return calcScore(5, straightVals);
+  
+  // 级别 4：三条 (Three of a Kind)
+  if (groups[0].count === 3) {
+    const kickers = cards.filter(c => c.val !== groups[0].val).slice(0, 2);
+    return calcScore(4, [groups[0].val, groups[0].val, groups[0].val, kickers[0], kickers[1]]);
+  }
+  
+  // 级别 3：两对 (Two Pair)
+  if (groups[0].count === 2 && groups.length > 1 && groups[1].count === 2) {
+    const kicker = cards.find(c => c.val !== groups[0].val && c.val !== groups[1].val);
+    return calcScore(3, [groups[0].val, groups[0].val, groups[1].val, groups[1].val, kicker]);
+  }
+  
+  // 级别 2：一对 (One Pair)
+  if (groups[0].count === 2) {
+    const kickers = cards.filter(c => c.val !== groups[0].val).slice(0, 3);
+    return calcScore(2, [groups[0].val, groups[0].val, kickers[0], kickers[1], kickers[2]]);
+  }
+  
+  // 级别 1：高牌 (High Card)
+  return calcScore(1, cards.slice(0, 5));
 }
 
 const PHASE_NAMES = { preflop: "翻牌前", flop: "翻牌", turn: "转牌", river: "河牌", showdown: "摊牌" };
@@ -147,9 +248,9 @@ export default function App() {
   const [roomType, setRoomType] = useState("low");
 
   const [money,                setMoney]                = useStickyState(10000, "qw_money_v72");
-  const [userChips,            setUserChips]            = useStickyState(1000,    "qw_userChips_v721");
-  const [eyePoints,            setEyePoints]            = useStickyState(0,       "qw_eyePoints_v721");
-  const [assets,               setAssets]               = useStickyState({},      "qw_assets_v721");
+  const [userChips,            setUserChips]            = useStickyState(1000,    "qw_userChips_v722");
+  const [eyePoints,            setEyePoints]            = useStickyState(0,       "qw_eyePoints_v722");
+  const [assets,               setAssets]               = useStickyState({},      "qw_assets_v722");
   const [stats,                setStats]                = useStickyState(
     { totalWins: 0, highWins: 0, escapeCheats: 0, catchCheats: 0, maxChips: 2000 }, "qw_stats_v72"
   );
@@ -286,7 +387,8 @@ const doShowdown = useCallback((finalPot, finalChips, finalFolded, allComm, tabl
       if (s > maxOppScore) { maxOppScore = s; oppWinnerId = pl.id; }
     });
     const isRigged = cheaters.length > 0;
-    const userWin = myScore >= 0 && (!isRigged && myScore > maxOppScore);
+    const userWin = myScore >= 0 && (!isRigged && myScore > maxOppScore
+);
     const newChips = { ...finalChips }; setPhase("showdown");
     if (userWin) {
       playSound("win"); newChips[0] = (newChips[0] || 0) + finalPot; setPlayerChips(newChips);
@@ -449,7 +551,7 @@ const doShowdown = useCallback((finalPot, finalChips, finalFolded, allComm, tabl
     return (
       <div style={{ minHeight: "100vh", background: "#0a0a0a", color: "#e8d5b0", padding: "15px 10px", fontFamily: "sans-serif", paddingBottom: 50 }}>
         <style>{CSS_ANIMATIONS}</style>
-        <h2 style={{ textAlign: "center", color: "#ffd700", margin: "0 0 15px 0" }}>赌神之路 V7.2.1</h2>
+        <h2 style={{ textAlign: "center", color: "#ffd700", margin: "0 0 15px 0" }}>赌神之路 V7.2.2</h2>
 
         {/* 资产栏 */}
         <div style={{ display: "flex", justifyContent: "space-between", background: "#1a1a1a", padding: 12, borderRadius: 8, marginBottom: 15 }}>
