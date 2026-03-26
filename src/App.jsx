@@ -53,7 +53,7 @@ const ACHIEVEMENT_LIST = [
   { id: "catch_1",     name: "运气爆棚",   icon: "🎲", desc: "成功抓千1次",              condition: s => s.catchCheats >= 1 },
   { id: "catch_10",    name: "言出法随",   icon: "🚨", desc: "成功抓千10次",             condition: s => s.catchCheats >= 10 },
   { id: "catch_100",   name: "熟门熟路",   icon: "🔍", desc: "成功抓千100次",            condition: s => s.catchCheats >= 100 },
-  { id: "catch_1000",  name: "人性摄像头", icon: "📷", desc: "成功抓千1000次",           condition: s => s.catchCheats >= 1000 },
+  { id: "catch_1000",  name: "人形摄像头", icon: "📷", desc: "成功抓千1000次",           condition: s => s.catchCheats >= 1000 },
   { id: "catch_10000", name: "看破一切",   icon: "🔮", desc: "成功抓千10000次",          condition: s => s.catchCheats >= 10000 },
   { id: "god",         name: "赌神",       icon: "🃏", desc: "解锁所有其他成就",         condition: () => false },
 ];
@@ -146,8 +146,8 @@ export default function App() {
   const [view,     setView]     = useState("lobby");
   const [roomType, setRoomType] = useState("low");
 
-  const [money,                setMoney]                = useStickyState(1000000, "qw_money_v72");
-  const [userChips,            setUserChips]            = useStickyState(2000,    "qw_userChips_v72");
+  const [money,                setMoney]                = useStickyState(10000, "qw_money_v72");
+  const [userChips,            setUserChips]            = useStickyState(1000,    "qw_userChips_v721");
   const [eyePoints,            setEyePoints]            = useStickyState(0,       "qw_eyePoints_v72");
   const [assets,               setAssets]               = useStickyState({},      "qw_assets_v72");
   const [stats,                setStats]                = useStickyState(
