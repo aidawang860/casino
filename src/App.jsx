@@ -314,7 +314,11 @@ export default function App() {
   };
 
   const entertain = () => {
-    playSound("deal"); const cost = 100;
+    // BUG1修复：消遣费用应为20筹码，原代码错误写成100
+    // BUG2修复：神眼已满200时直接拦截，不消耗筹码
+    if (eyePoints >= 200) { alert("赌神之眼已满！"); return; }
+    playSound("deal");
+    const cost = 20;
     if (view === "lobby" && userChips >= cost) {
       setUserChips(c => c - cost); setEyePoints(e => Math.min(200, e + 20));
     } else if (view === "game" && (playerChips[0] || 0) >= cost) {
@@ -323,7 +327,7 @@ export default function App() {
     } else alert("筹码不足！");
   };
 
-  // ── 牌局流程 ──
+// ── 牌局流程 ──
   const enterGame = (type) => {
     playSound("chip");
     if (type === "high" && userChips < 10000) return alert("高级场需 10000 筹码！");
@@ -342,7 +346,7 @@ export default function App() {
     playSound("deal");
     const isHigh = type === "high";
 
-// 白屏修复①配套：用 newDeck 作局部变量名，避免遮蔽同名 state
+    // 白屏修复①配套：用 newDeck 作局部变量名，避免遮蔽同名 state
     const newDeck = createDeck();
     const hands = {};
     const botIds = table.filter(p => !p.isUser).map(p => p.id);
@@ -378,12 +382,16 @@ export default function App() {
     const AI_WIN_TAUNTS  = ["就这点本事也敢All-in？", "你的筹码我笑纳了！", "回家再练十年吧！", "看清楚了，这才叫德州扑克。"];
     const AI_LOSE_TAUNTS = ["今天手气真差...", "算你走运！", "你是不是出老千了？！", "别得意，下一局连本带利赢回来！"];
 
-    let maxScore = -1;
+    // BUG5修复：原代码用 -1 标记老千局玩家得分，但 maxScore 初始值也是 -1。
+    // 若玩家是唯一未弃牌者，所有 AI 都弃牌，maxScore 保持 -1，
+    // 玩家 score(-1) === maxScore(-1) → 玩家错误赢得老千局。
+    // 修复：改用 -Infinity 作为初始最大值，-1 作为玩家弃权分不再产生歧义。
+    let maxScore = -Infinity;
     const scores = {};
     currentTab.forEach(pl => {
       if (fd[pl.id]) return;
       let s = evaluateHand(allHands[pl.id], allComm);
-      if (isRigged && pl.id === 0) s = -1;
+      if (isRigged && pl.id === 0) s = -1; // -1 在任何真实手牌分(≥1)面前都会落败
       scores[pl.id] = s;
       if (s > maxScore) maxScore = s;
     });
@@ -464,6 +472,10 @@ export default function App() {
     });
     const finalPot = curPot + aiBets;
     const newBet = activeBots.length > 0 && aiBets > 0 ? Math.floor(aiBets / activeBots.length) : 0;
+    // BUG3修复：AI弃牌后必须同步React folded state。
+    // 原代码只更新了局部变量 newFolded，未调用 setFolded。
+    // 导致玩家下次操作时从 folded state 读到旧值，已弃牌AI重新参与下注。
+    setFolded(newFolded);
     if (nextPhase === "showdown") {
       setPot(finalPot); setPlayerChips(newChips);
       doShowdown(finalPot, newChips, newFolded, comm, table);
@@ -606,7 +618,7 @@ export default function App() {
             其余模块放在它的后面，结构清晰。
         ══════════════════════════════════════════════ */}
 
-{/* 资产栏：仅显示 存款 / 筹码 / 神眼 */}
+        {/* 资产栏：仅显示 存款 / 筹码 / 神眼 */}
         <div style={{ display: "flex", justifyContent: "space-between", background: "#1a1a1a", padding: 12, borderRadius: 8, marginBottom: 15 }}>
           <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: 12, color: "#888" }}>存款</div>
@@ -622,7 +634,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* 救济金 */}
+{/* 救济金 */}
         {money === 0 && userChips === 0 && (
           <button
             onClick={() => { setMoney(10000); alert("基金会发放了 10,000 救济金！"); }}
@@ -676,7 +688,7 @@ export default function App() {
           <button onClick={() => enterGame("low")} style={{ padding: "14px", borderRadius: 8, background: "#1f2937", color: "#fff", border: "1px solid #444", fontSize: 16, fontWeight: "bold" }}>🟢 初级场</button>
           <button onClick={() => enterGame("high")} style={{ padding: "14px", borderRadius: 8, background: "#450a0a", color: "#fca5a5", border: "1px solid #991b1b", fontSize: 16, fontWeight: "bold" }}>🔥 高级场</button>
           <button onClick={() => { if (money >= 1000) { setMoney(m => m - 1000); setUserChips(c => c + 100); } else alert("存款不足！"); }} style={{ padding: "12px", borderRadius: 8, background: "#2563eb", color: "#fff", border: "none" }}>兑筹码 ($1k→100)</button>
-          <button onClick={entertain} style={{ padding: "12px", borderRadius: 8, background: "#7e22ce", color: "#fff", border: "none" }}>🍷 消遣 (神眼+20)</button>
+          <button onClick={entertain} style={{ padding: "12px", borderRadius: 8, background: eyePoints >= 200 ? "#3b0764" : "#7e22ce", color: eyePoints >= 200 ? "#888" : "#fff", border: "none" }}>🍷 消遣 (-20筹 神眼+20{eyePoints >= 200 ? " 已满" : ""})</button>
         </div>
 
         {/* 荣誉墙 */}
@@ -710,7 +722,7 @@ export default function App() {
           </div>
         ))}
 
-{/* 典当行 */}
+        {/* 典当行 */}
         <h3 style={{ fontSize: 16, borderBottom: "1px solid #333", paddingBottom: 5, marginTop: 10 }}>💎 典当行</h3>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {SHOP_ITEMS.map(item => (
@@ -850,7 +862,7 @@ export default function App() {
           </div>
         </div>
 
-{/* 日志 */}
+        {/* 日志 */}
         <div ref={logRef} style={{ height: 72, overflowY: "auto", background: "#000", padding: 8, fontSize: 12, borderRadius: 6, border: "1px solid #333", color: "#888" }}>
           {log.map(l => <div key={l.id} className="animate-slide">{l.icon} {l.text}</div>)}
         </div>
@@ -910,7 +922,7 @@ export default function App() {
               <input
                 type="number" value={raiseInput} onChange={e => setRaiseInput(e.target.value)}
                 placeholder={`加注(≥${roomType === "high" ? 200 : 20})`}
-                style={{ flex: 1.5, padding: "10px 8px", borderRadius: 8, background: "#1a1a1a", color: "#fff", border: "1px solid #555", fontSize: 13, minWidth: 0 }}
+                style={{ flex: 1.5, padding: "10px 8px", borderRadius: 8, background: "#1a1a1a", color: "#fff", border: "1px solid #555", fontSize:13, minWidth: 0 }}
               />
               <button onClick={() => handleAction("raise")} style={{ flex: 1, padding: "10px 0", borderRadius: 8, background: "#78350f", color: "#fcd34d", border: "1px solid #92400e", fontSize: 14, fontWeight: "bold" }}>📈 加注</button>
               <button onClick={() => handleAction("allin")} style={{ flex: 1, padding: "10px 0", borderRadius: 8, background: "#4c1d95", color: "#ddd6fe", border: "1px solid #6d28d9", fontSize: 14, fontWeight: "bold" }}>💥 全压</button>
