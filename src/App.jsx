@@ -244,17 +244,49 @@ function Card({ card, hidden, small }) {
 // 3. 主程序
 // ==============================
 export default function App() {
+  useEffect(() => {
+    const OLD_VER = "v722"; // 你的旧版本号
+    const NEW_VER = "v73"; // 你当前正在用的新版本号
+    
+    const oldMoney = localStorage.getItem(`qw_money_${OLD_VER}`);
+    const newMoney = localStorage.getItem(`qw_money_${NEW_VER}`);
+
+    // 只有当“发现旧钱”且“新家还没钱”时，才进行搬家
+    if (oldMoney !== null && newMoney === null) {
+      const keys = ["money", "userChips", "eyePoints", "assets", "stats", "achieves"];
+      keys.forEach(key => {
+        const val = localStorage.getItem(`qw_${key}_${OLD_VER}`);
+        if (val !== null) {
+          localStorage.setItem(`qw_${key}_${NEW_VER}`, val);
+        }
+      });
+      // 搬完家后刷新页面，让 useStickyState 重新加载新 Key 的值
+      window.location.reload();
+    }
+  }, []);
+   
   const [view,     setView]     = useState("lobby");
   const [roomType, setRoomType] = useState("low");
 
-  const [money,                setMoney]                = useStickyState(10000, "qw_money_v72");
-  const [userChips,            setUserChips]            = useStickyState(1000,    "qw_userChips_v722");
-  const [eyePoints,            setEyePoints]            = useStickyState(0,       "qw_eyePoints_v722");
-  const [assets,               setAssets]               = useStickyState({},      "qw_assets_v722");
+  const [money,                setMoney]                = useStickyState(10000, "qw_money_v723");
+  const [userChips,            setUserChips]            = useStickyState(1000,    "qw_userChips_v73");
+  const [eyePoints,            setEyePoints]            = useStickyState(0,       "qw_eyePoints_v73");
+  const [assets,               setAssets]               = useStickyState({},      "qw_assets_v73");
   const [stats,                setStats]                = useStickyState(
-    { totalWins: 0, highWins: 0, escapeCheats: 0, catchCheats: 0, maxChips: 2000 }, "qw_stats_v72"
+    { totalWins: 0, highWins: 0, escapeCheats: 0, catchCheats: 0, maxChips: 2000 }, "qw_stats_v73"
   );
-  const [unlockedAchievements, setUnlockedAchievements] = useStickyState([], "qw_achieves_v72");
+  const [unlockedAchievements, setUnlockedAchievements] = useStickyState([], "qw_achieves_v73");
+
+// === 新增：系统核心状态变量 ===
+  const [cheatLevel, setCheatLevel] = useStickyState(1, "qw_cheat_lv_v73");
+  const [cheatExp, setCheatExp] = useStickyState(0, "qw_cheat_exp_v73");
+  const [matchHistory, setMatchHistory] = useStickyState([], "qw_history_v73");
+  
+  // 游戏内状态（无需持久化）
+  const [revealedHands, setRevealedHands] = useState({}); // 记录被透视的玩家ID
+  const [showCheatModal, setShowCheatModal] = useState(false); // 控制出千面板
+  const [showCheatInfo, setShowCheatInfo] = useState(false); // 控制大厅出千说明
+  const [peekComm, setPeekComm] = useState([]); // 记录被透视的未发公牌
 
   const [currentTable,   setCurrentTable]   = useState([]);
   const [playerChips,    setPlayerChips]    = useState({});
@@ -359,6 +391,11 @@ export default function App() {
   };
 
   const startNewGame = (chips = playerChips, table = currentTable, type = roomType) => {
+
+  // 在新一局开始时清空透视状态
+  setRevealedHands({}); 
+  setPeekComm([]);      
+
     playSound("deal");
     const isHigh = type === "high"; const deck = createDeck(); const hands = {};
     const botIds = table.filter(p => !p.isUser).map(p => p.id);
@@ -379,30 +416,162 @@ export default function App() {
 
 const doShowdown = useCallback((finalPot, finalChips, finalFolded, allComm, table) => {
     const fd = finalFolded || {};
-    const myScore = fd[0] ? -1 : evaluateHand(allHands[0], allComm);
-    let maxOppScore = 0; let oppWinnerId = -1;
-    (table || currentTable).forEach(pl => {
-      if (pl.id === 0 || fd[pl.id]) return;
-      const s = evaluateHand(allHands[pl.id], allComm);
-      if (s > maxOppScore) { maxOppScore = s; oppWinnerId = pl.id; }
-    });
+    const currentTab = table || currentTable;
     const isRigged = cheaters.length > 0;
-    const userWin = myScore >= 0 && (!isRigged && myScore > maxOppScore
-);
-    const newChips = { ...finalChips }; setPhase("showdown");
-    if (userWin) {
-      playSound("win"); newChips[0] = (newChips[0] || 0) + finalPot; setPlayerChips(newChips);
-      const updatedStats = { ...stats, totalWins: stats.totalWins + 1, highWins: roomType === "high" ? stats.highWins + 1 : stats.highWins };
-      setStats(updatedStats); triggerAchievementCheck(updatedStats, unlockedAchievements, assets, newChips[0], true);
-      setWinner(0); addLog("🎉", `牌技压制！狂揽 ${finalPot}`);
+
+    // 1. 计算所有未弃牌玩家的得分
+    let maxScore = -1;
+    const scores = {};
+    currentTab.forEach(pl => {
+      if (fd[pl.id]) return;
+      let s = evaluateHand(allHands[pl.id], allComm);
+      // 老千局中，如果没被识破，玩家强制出局(得分为-1)
+      if (isRigged && pl.id === 0) s = -1; 
+      scores[pl.id] = s;
+      if (s > maxScore) maxScore = s;
+    });
+
+    // 2. 找出所有最高分玩家（捕获平局的所有人）
+    const winners = currentTab.filter(pl => scores[pl.id] === maxScore && !fd[pl.id]);
+    const newChips = { ...finalChips };
+    setPhase("showdown");
+
+    if (winners.length === 0) {
+      setWinner(-1);
+      setPlayerChips(newChips);
+      return;
+    }
+
+    // 3. 绝对公平：切分底池
+    const splitAmount = Math.floor(finalPot / winners.length);
+    winners.forEach(w => {
+      newChips[w.id] = (newChips[w.id] || 0) + splitAmount;
+    });
+    setPlayerChips(newChips);
+
+    // 4. 判断胜负与日志播报
+    const userWon = winners.some(w => w.id === 0);
+    const isSplit = winners.length > 1;
+
+    if (userWon) {
+          // === 3. AI 嘲讽语库 ===
+    const AI_WIN_TAUNTS = ["就这点本事也敢All-in？", "你的筹码我笑纳了！", "回家再练十年吧！", "看清楚了，这才叫德州扑克。"];
+    const AI_LOSE_TAUNTS = ["今天手气真差...", "算你走运！", "你是不是出老千了？！", "别得意，下一局连本带利赢回来！"];
+
+    if (userWon) {
+      playSound("win");
+      // 更新成就与统计
+      const updatedStats = { 
+        ...stats, 
+        totalWins: stats.totalWins + 1, 
+        highWins: roomType === "high" ? stats.highWins + 1 : stats.highWins 
+      };
+      setStats(updatedStats); 
+      triggerAchievementCheck(updatedStats, unlockedAchievements, assets, newChips[0], true);
+      
+      setWinner(0); 
+      if (isSplit) {
+        const others = winners.filter(w => w.id !== 0).map(w => w.name).join("、");
+        addLog("🤝", `平局！与 ${others} 平分底池，拿回 ${splitAmount}`);
+        setMatchHistory(p => [{ res: '平', type: roomType, pot: finalPot }, ...p].slice(0, 5));
+      } else {
+        addLog("🎉", `独揽 ${finalPot}`);
+        setMatchHistory(p => [{ res: '赢', type: roomType, pot: finalPot }, ...p].slice(0, 5));
+        
+        // AI 输了随机嘲讽
+        const loser = currentTab.find(p => p.id !== 0 && !fd[p.id]);
+        if (loser && Math.random() > 0.4) {
+           addLog("💬", `${loser.name}: "${AI_LOSE_TAUNTS[Math.floor(Math.random()*AI_LOSE_TAUNTS.length)]}"`);
+        }
+      }
     } else {
       playSound("deal");
-      if (oppWinnerId >= 0) newChips[oppWinnerId] = (newChips[oppWinnerId] || 0) + finalPot;
-      setPlayerChips(newChips);
-      setWinner(oppWinnerId >= 0 ? oppWinnerId : ((table || currentTable).find(p => !p.isUser)?.id || -1));
-      addLog(fd[0] ? "😞" : "☠️", fd[0] ? "你已弃牌，出局" : "败北，血本无归");
+      const winnerPlayer = winners[0];
+      setWinner(winnerPlayer.id);
+      
+      if (isSplit) {
+        addLog("🤝", `对手之间平局，平分底池`);
+        setMatchHistory(p => [{ res: '平', type: roomType, pot: finalPot }, ...p].slice(0, 5));
+      } else {
+        addLog(fd[0] ? "😞" : "☠️", fd[0] ? "你已弃牌" : "败北");
+        setMatchHistory(p => [{ res: '输', type: roomType, pot: finalPot }, ...p].slice(0, 5));
+        
+        // AI 赢了随机嘲讽
+        if (!fd[0] && Math.random() > 0.4) {
+           addLog("💬", `${winnerPlayer.name}: "${AI_WIN_TAUNTS[Math.floor(Math.random()*AI_WIN_TAUNTS.length)]}"`);
+        }
+      }
     }
-  }, [allHands, cheaters, currentTable, roomType, stats, unlockedAchievements, assets, triggerAchievementCheck, addLog]);
+
+    }
+  }, [allHands, cheaters, currentTable, roomType, stats, unlockedAchievements, assets, triggerAchievementCheck, addLog, eyePoints, cheatLevel, cheatExp, revealedHands, deck, matchHistory, folded]);
+
+  const executeCheat = (targetId1, targetId2, swapTargetId) => {
+    if (eyePoints < 200) return alert("赌神之眼不足 200！");
+    setEyePoints(eyePoints - 200);
+
+    // 计算经验与升级
+    let newExp = cheatExp + 10;
+    let newLv = cheatLevel;
+    let req = Math.pow(10, newLv);
+    while (newLv < 10 && newExp >= req) {
+      newExp -= req;
+      newLv++;
+      req = Math.pow(10, newLv);
+      alert(`🎉 千术精进！出千等级提升至 Lv.${newLv}！`);
+    }
+    setCheatExp(newExp);
+    setCheatLevel(newLv);
+
+    // 辅助函数：从牌堆抽指定条件的牌
+    const drawSpecific = (cond) => {
+      const idx = deck.findIndex(cond);
+      return idx !== -1 ? deck.splice(idx, 1)[0] : deck.pop();
+    };
+
+    let newHands = { ...allHands };
+    let newRevealed = { ...revealedHands };
+    let undealtComm = deck.slice(-5); // 预读未来的公牌
+
+    const activeOpponents = currentTable.filter(p => p.id !== 0 && !folded[p.id]);
+    const randomOpp = () => activeOpponents[Math.floor(Math.random() * activeOpponents.length)]?.id;
+    const t1 = targetId1 || randomOpp();
+
+    try {
+      if (newLv >= 1 && t1) newRevealed[t1] = true;
+      if (newLv >= 3 && t1) newHands[t1][0] = deck.pop(); // 随机换1张
+      if (newLv >= 4 && t1) newHands[t1][0] = drawSpecific(c => RANKS.indexOf(c.rank) + 2 < 10);
+      if (newLv >= 5 && t1) newHands[t1][0] = drawSpecific(c => RANKS.indexOf(c.rank) + 2 < 8);
+      if (newLv >= 6 && targetId2) newRevealed[targetId2] = true;
+      
+      if (newLv >= 7) setPeekComm(undealtComm); // 透视公牌
+      if (newLv >= 8) deck[deck.length - 1] = drawSpecific(c => true); // 随机换掉下一张要发的公牌
+      if (newLv >= 9 && t1) {
+        // 拿未发的公牌与目标底牌互换
+        const temp = deck[deck.length - 1];
+        deck[deck.length - 1] = newHands[t1][0];
+        newHands[t1][0] = temp;
+      }
+      if (newLv === 10) {
+        // 透视全场
+        activeOpponents.forEach(p => newRevealed[p.id] = true);
+        // 与指定玩家互换底牌
+        if (swapTargetId && newHands[swapTargetId]) {
+          const myHand = [...newHands[0]];
+          newHands[0] = [...newHands[swapTargetId]];
+          newHands[swapTargetId] = myHand;
+        }
+      }
+
+      setAllHands(newHands);
+      setRevealedHands(newRevealed);
+      addLog("👁️", `发动千术 (Lv.${newLv}) 成功！`);
+    } catch (e) {
+      console.error("出千异常", e);
+    }
+    setShowCheatModal(false);
+  };
+
 
   const advancePhase = useCallback((curPot, curChips, curPhase, curFolded, comm, table) => {
     const bb = roomType === "high" ? 200 : 20;
@@ -439,6 +608,54 @@ const doShowdown = useCallback((finalPot, finalChips, finalFolded, allComm, tabl
       addLog("🃏", `--- ${PHASE_NAMES[nextPhase]} ---${newBet > 0 ? ` 需跟注: ${newBet}` : ""}`);
     }
   }, [roomType, currentTable, allHands, addLog, doShowdown]);
+
+  const executeCheat = (targetId1, targetId2, swapTargetId) => {
+    if (eyePoints < 200) return alert("👀 神眼不足 200！");
+    
+    // 1. 更新消耗与等级
+    setEyePoints(prev => prev - 200);
+    let newExp = cheatExp + 10;
+    let newLv = cheatLevel;
+    let req = Math.pow(10, newLv);
+    while (newLv < 10 && newExp >= req) {
+      newExp -= req;
+      newLv++;
+      req = Math.pow(10, newLv);
+      alert(`🎉 突破！出千等级升至 Lv.${newLv}`);
+    }
+    setCheatExp(newExp);
+    setCheatLevel(newLv);
+
+    // 2. 准备状态副本 (React 状态更新必须用副本)
+    const nextHands = { ...allHands };
+    const nextRevealed = { ...revealedHands };
+    const nextDeck = [...deck]; 
+
+    const activeOpponents = currentTable.filter(p => p.id !== 0 && !folded[p.id]);
+    const t1 = targetId1 || activeOpponents[0]?.id;
+
+    // 3. 执行分级逻辑
+    if (newLv >= 1 && t1 !== undefined) nextRevealed[t1] = true;
+    if (newLv >= 3 && t1 !== undefined) nextHands[t1] = [nextDeck.pop(), nextHands[t1][1]];
+    if (newLv >= 7) setPeekComm(nextDeck.slice(-3)); 
+    
+    if (newLv === 10) {
+      activeOpponents.forEach(p => nextRevealed[p.id] = true);
+      if (swapTargetId !== undefined && nextHands[swapTargetId]) {
+        const myHand = nextHands[0];
+        nextHands[0] = nextHands[swapTargetId];
+        nextHands[swapTargetId] = myHand;
+      }
+    }
+
+    // 4. 统一更新状态
+    setAllHands(nextHands);
+    setRevealedHands(nextRevealed);
+    setDeck(nextDeck); // 必须更新 deck，否则下次抽牌会重复
+    addLog("👁️", `发动 ${newLv} 级千术！`);
+    setShowCheatModal(false);
+  };
+
 
   // ── 玩家操作 ──
   const handleAction = (type) => {
@@ -551,7 +768,7 @@ const doShowdown = useCallback((finalPot, finalChips, finalFolded, allComm, tabl
     return (
       <div style={{ minHeight: "100vh", background: "#0a0a0a", color: "#e8d5b0", padding: "15px 10px", fontFamily: "sans-serif", paddingBottom: 50 }}>
         <style>{CSS_ANIMATIONS}</style>
-        <h2 style={{ textAlign: "center", color: "#ffd700", margin: "0 0 15px 0" }}>赌神之路 V7.2.2</h2>
+        <h2 style={{ textAlign: "center", color: "#ffd700", margin: "0 0 15px 0" }}>赌神之路 V7.3</h2>
 
         {/* 资产栏 */}
         <div style={{ display: "flex", justifyContent: "space-between", background: "#1a1a1a", padding: 12, borderRadius: 8, marginBottom: 15 }}>
@@ -559,6 +776,55 @@ const doShowdown = useCallback((finalPot, finalChips, finalFolded, allComm, tabl
             <div style={{ fontSize: 12, color: "#888" }}>存款</div>
             <div style={{ color: "#4ade80", fontSize: 16, fontWeight: "bold" }}>${(money / 1000).toFixed(0)}k</div>
           </div>
+
+      {/* 1. 救济金 */}
+      {money === 0 && userChips === 0 && (
+        <button 
+          onClick={() => { setMoney(10000); alert("基金会发放了 10,000 救济金！"); }}
+          style={{ width: "100%", background: "#f59e0b", color: "#000", fontWeight: "bold", padding: 12, borderRadius: 8, marginBottom: 15, border: "none" }}
+        >
+          🆘 领取 10,000 救济金
+        </button>
+      )}
+
+      {/* 2. 兑换钱庄 */}
+      <div style={{ background: "#1a1a1a", padding: 12, borderRadius: 8, marginBottom: 15, border: "1px solid #332b00" }}>
+        <div style={{ color: "#ffd700", fontWeight: "bold", marginBottom: 8, fontSize: 14 }}>💱 钱庄 (1筹码 = 10资金)</div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={() => { if(userChips>=100) { setUserChips(userChips-100); setMoney(money+1000); } }} style={{ flex: 1, background: "#1e3a8a", color: "#fff", padding: 8, borderRadius: 5, fontSize: 12, border: "none" }}>100 筹码 → 1K金</button>
+          <button onClick={() => { if(money>=1000) { setMoney(money-1000); setUserChips(userChips+100); } }} style={{ flex: 1, background: "#065f46", color: "#fff", padding: 8, borderRadius: 5, fontSize: 12, border: "none" }}>1K 资金 → 100筹</button>
+        </div>
+      </div>
+
+      {/* 3. 最近战绩 */}
+      <div style={{ background: "#1a1a1a", padding: 12, borderRadius: 8, marginBottom: 15 }}>
+        <div style={{ color: "#ffd700", fontWeight: "bold", marginBottom: 8, fontSize: 14 }}>🏆 最近战绩</div>
+        <div style={{ fontSize: 11 }}>
+          {matchHistory.length === 0 ? <div style={{ color: "#666" }}>暂无记录</div> : matchHistory.map((h, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #333", padding: "4px 0" }}>
+              <span style={{ color: h.res === '赢' ? '#4ade80' : '#f87171' }}>[{h.res}] {h.type === 'low' ? '低级' : '高级'}</span>
+              <span>${h.pot}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 4. 出千等级 */}
+      <div style={{ background: "#2e1065", padding: 12, borderRadius: 8, marginBottom: 15, border: "1px solid #5b21b6" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <span style={{ color: "#ddd6fe", fontWeight: "bold", fontSize: 14 }}>👁️ 千术: Lv.{cheatLevel}</span>
+          <button onClick={() => setShowCheatInfo(!showCheatInfo)} style={{ background: "#4c1d95", color: "#fff", fontSize: 10, padding: "2px 6px", borderRadius: 4, border: "none" }}>详情</button>
+        </div>
+        <div style={{ width: "100%", background: "#000", h: 6, height: 6, borderRadius: 3, overflow: "hidden" }}>
+          <div style={{ width: `${cheatLevel >= 10 ? 100 : (cheatExp / Math.pow(10, cheatLevel) * 100)}%`, background: "linear-gradient(90deg, #7c3aed, #db2777)", height: "100%" }}></div>
+        </div>
+        {showCheatInfo && (
+          <div style={{ marginTop: 10, fontSize: 10, color: "#ddd6fe", background: "rgba(0,0,0,0.3)", padding: 8, borderRadius: 4, lineHeight: "1.5" }}>
+            Lv1-2: 透视玩家 | Lv3-5: 弱化对手<br/>Lv6-7: 透视公牌 | Lv8-10: 掌控全局
+          </div>
+        )}
+      </div>
+
           <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: 12, color: "#888" }}>筹码</div>
             <div style={{ color: "#ffd700", fontSize: 16, fontWeight: "bold" }}>{Math.floor(userChips)}</div>
@@ -664,6 +930,79 @@ const doShowdown = useCallback((finalPot, finalChips, finalFolded, allComm, tabl
         </div>
       </div>
 
+{/* 游戏界面的出千入口与面板 - 适配行内样式版 */}
+{!folded[0] && phase !== "showdown" && (
+  <div style={{ position: "absolute", top: "10px", left: "10px", zIndex: 1000 }}>
+    <button 
+      onClick={() => setShowCheatModal(!showCheatModal)}
+      style={{ 
+        background: "#9333ea", 
+        color: "#white", 
+        padding: "6px 12px", 
+        borderRadius: "8px", 
+        boxShadow: "0 4px 10px rgba(147, 51, 234, 0.5)",
+        border: "none",
+        fontWeight: "bold",
+        cursor: "pointer"
+      }}
+    >
+      👁️ 出千 (消耗200神眼)
+    </button>
+    
+    {peekComm.length > 0 && (
+      <div style={{ marginTop: "8px", background: "rgba(0,0,0,0.7)", color: "#d8b4fe", padding: "8px", fontSize: "12px", borderRadius: "6px" }}>
+        未来公牌透视: {peekComm.map(c => `${c.suit}${c.rank}`).join(', ')}
+      </div>
+    )}
+
+    {showCheatModal && (
+      <div style={{ marginTop: "8px", background: "#111827", border: "1px solid #a855f7", padding: "12px", borderRadius: "8px", color: "#fff", width: "190px" }}>
+        <p style={{ marginBottom: "8px", color: "#d8b4fe", fontSize: "12px" }}>当前等级: Lv.{cheatLevel}</p>
+        
+        {cheatLevel >= 2 && (
+          <select id="cheatT1" style={{ width: "100%", background: "#1f2937", color: "#fff", padding: "4px", marginBottom: "8px", borderRadius: "4px", border: "1px solid #374151" }}>
+            <option value="">选择透视/换牌目标</option>
+            {currentTable.filter(p=>p.id!==0 && !folded[p.id]).map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        )}
+
+        {cheatLevel >= 6 && (
+          <select id="cheatT2" style={{ width: "100%", background: "#1f2937", color: "#fff", padding: "4px", marginBottom: "8px", borderRadius: "4px", border: "1px solid #374151" }}>
+            <option value="">选择第二个透视目标</option>
+            {currentTable.filter(p=>p.id!==0 && !folded[p.id]).map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        )}
+
+        {cheatLevel === 10 && (
+          <select id="cheatSwap" style={{ width: "100%", background: "#7f1d1d", color: "#fff", padding: "4px", marginBottom: "8px", borderRadius: "4px", border: "1px solid #b91c1c", fontWeight: "bold" }}>
+            <option value="">选择要互换底牌的冤大头</option>
+            {currentTable.filter(p=>p.id!==0 && !folded[p.id]).map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        )}
+
+        <button 
+          onClick={() => {
+            const t1 = document.getElementById("cheatT1")?.value;
+            const t2 = document.getElementById("cheatT2")?.value;
+            const swap = document.getElementById("cheatSwap")?.value;
+            executeCheat(t1, t2, swap);
+          }}
+          style={{ width: "100%", background: "#7e22ce", color: "#fff", padding: "8px", borderRadius: "6px", fontWeight: "bold", border: "none", cursor: "pointer" }}
+        >
+          执行千术
+        </button>
+      </div>
+    )}
+  </div>
+)}
+
+
       <div style={{ flex: 1, overflowY: "auto", padding: 10, display: "flex", flexDirection: "column", gap: 10 }}>
         {/* AI 玩家区 */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -677,7 +1016,21 @@ const doShowdown = useCallback((finalPot, finalChips, finalFolded, allComm, tabl
                 <div style={{ fontSize: 20 }}>{p.avatar} <span style={{ fontSize: 12, color: "#ccc" }}>{p.name}</span></div>
                 <div style={{ fontSize: 10, color: "#888", marginTop: 2, height: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.desc}</div>
                 <div style={{ fontSize: 12, color: "#ffd700", marginTop: 4 }}>🪙 {Math.floor(playerChips[p.id] || 0)}</div>
-                {phase === "showdown" && allHands[p.id] && (
+                          {/* AI 显牌逻辑修复版 */}
+          <div style={{ display: "flex", gap: 2, justifyContent: "center", marginTop: 6, minHeight: 30 }}>
+            {allHands[p.id] && (phase === "showdown" || (revealedHands && revealedHands[p.id])) ? (
+              allHands[p.id].map((c, i) => (
+                <Card key={i} card={c} small />
+              ))
+            ) : (
+              /* 未透视时显示的卡背，确保有占位，不让布局跳动 */
+              <>
+                <div style={{ width: 20, height: 28, background: "#991b1b", border: "1px solid #fff", borderRadius: 2 }}></div>
+                <div style={{ width: 20, height: 28, background: "#991b1b", border: "1px solid #fff", borderRadius: 2 }}></div>
+              </>
+            )}
+          </div>
+
                   <div style={{ display: "flex", gap: 2, justifyContent: "center", marginTop: 6 }}>
                     {allHands[p.id].map((c, i) => <Card key={i} card={c} small />)}
                   </div>
