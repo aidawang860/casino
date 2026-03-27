@@ -483,7 +483,6 @@ export default function App() {
           addLog(bot.avatar, `${bot.name} ${actionType} ${totalBet}`);
             } else {
       addLog(bot.avatar, `${bot.name} 选择过牌`);
-    }
   });
 
 setCurrentBet(0); // 这一轮博弈结束了，清空下注标杆，进入下一场（如翻牌转牌）
