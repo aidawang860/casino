@@ -1028,9 +1028,10 @@ const doShowdown = useCallback((finalPot, finalChips, finalFolded, allComm, tabl
                 <div style={{ width: 20, height: 28, background: "#991b1b", border: "1px solid #fff", borderRadius: 2 }}></div>
                 <div style={{ width: 20, height: 28, background: "#991b1b", border: "1px solid #fff", borderRadius: 2 }}></div>
               </>
-            )}
-          </div>                
-        </div>
+                </div>
+               );
+             })}
+             </div>
 
         {/* 公共牌区 */}
         <div style={{ background: "rgba(255,255,255,0.05)", padding: 10, borderRadius: 8, minHeight: 70, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6 }}>
