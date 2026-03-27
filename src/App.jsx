@@ -459,30 +459,24 @@ export default function App() {
       if (Math.random() < 0.2) {
         addLog(bot.avatar, `${bot.name} ${BOT_ACTIONS.fold[Math.floor(Math.random() * BOT_ACTIONS.fold.length)]}`);
         newFolded[bot.id] = true;
-      } else {
-       const strength = Math.min(score / 1500, 1);
+} else {
+        const strength = Math.min(score / 1500, 1);
         const botChips = newChips[bot.id] || 0;
-        
-        // 【核心逻辑】AI 必须跟注的金额：等于你的下注额，但不能超过它自己的筹码
         const mustCall = Math.min(incomingBet, botChips);
-        
-        // 如果牌特别好 (strength > 0.7)，在跟注基础上额外加注大盲的2倍
         const extraRaise = (strength > 0.7 && Math.random() > 0.5) ? bb * 2 : 0;
         const totalBet = Math.min(mustCall + extraRaise, botChips);
 
         if (totalBet > 0) {
           playSound("chip");
           newChips[bot.id] -= totalBet;
-          aiBets += totalBet; // 累加到本轮总下注中
-          
-          // 决定显示什么文案
+          aiBets += totalBet;
           let actionType = totalBet > incomingBet ? "加注到" : "跟注";
           if (totalBet >= botChips) actionType = "全压！";
           if (incomingBet === 0 && totalBet === 0) actionType = "过牌";
-          
-                  addLog(bot.avatar, `${bot.name} ${actionType} ${totalBet}`);
-      } else {
-        addLog(bot.avatar, `${bot.name} 选择过牌`);
+          addLog(bot.avatar, `${bot.name} ${actionType} ${totalBet}`);
+        } else {
+          addLog(bot.avatar, `${bot.name} 选择过牌`);
+        }
       }
     });
 
