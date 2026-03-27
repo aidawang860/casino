@@ -1029,15 +1029,7 @@ const doShowdown = useCallback((finalPot, finalChips, finalFolded, allComm, tabl
                 <div style={{ width: 20, height: 28, background: "#991b1b", border: "1px solid #fff", borderRadius: 2 }}></div>
               </>
             )}
-          </div>
-
-                  <div style={{ display: "flex", gap: 2, justifyContent: "center", marginTop: 6 }}>
-                    {allHands[p.id].map((c, i) => <Card key={i} card={c} small />)}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          </div>                
         </div>
 
         {/* 公共牌区 */}
