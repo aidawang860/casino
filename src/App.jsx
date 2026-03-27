@@ -196,17 +196,17 @@ export default function App() {
   const [view,     setView]     = useState("lobby");
   const [roomType, setRoomType] = useState("low");
 
-  const [money,                setMoney]                = useStickyState(10000,  "qw_money_v723");
-  const [userChips,            setUserChips]            = useStickyState(1000,   "qw_userChips_v73");
-  const [eyePoints,            setEyePoints]            = useStickyState(0,      "qw_eyePoints_v73");
-  const [assets,               setAssets]               = useStickyState({},     "qw_assets_v73");
+  const [money,                setMoney]                = useStickyState(10000,  "qw_money_v7.3.1");
+  const [userChips,            setUserChips]            = useStickyState(1000,   "qw_userChips_v7.3.1");
+  const [eyePoints,            setEyePoints]            = useStickyState(0,      "qw_eyePoints_v7.3.1");
+  const [assets,               setAssets]               = useStickyState({},     "qw_assets_v7.3.1");
   const [stats,                setStats]                = useStickyState(
-    { totalWins: 0, highWins: 0, escapeCheats: 0, catchCheats: 0, maxChips: 2000 }, "qw_stats_v73"
+    { totalWins: 0, highWins: 0, escapeCheats: 0, catchCheats: 0, maxChips: 2000 }, "qw_stats_v7.3.1"
   );
-  const [unlockedAchievements, setUnlockedAchievements] = useStickyState([], "qw_achieves_v73");
-  const [cheatLevel,  setCheatLevel]  = useStickyState(1,  "qw_cheat_lv_v73");
-  const [cheatExp,    setCheatExp]    = useStickyState(0,  "qw_cheat_exp_v73");
-  const [matchHistory,setMatchHistory]= useStickyState([], "qw_history_v73");
+  const [unlockedAchievements, setUnlockedAchievements] = useStickyState([], "qw_achieves_v7.3.1");
+  const [cheatLevel,  setCheatLevel]  = useStickyState(1,  "qw_cheat_lv_v7.3.1");
+  const [cheatExp,    setCheatExp]    = useStickyState(0,  "qw_cheat_exp_v7.3.1");
+  const [matchHistory,setMatchHistory]= useStickyState([], "qw_history_v7.3.1");
 
   // ── 游戏内状态 ──
   const [revealedHands,   setRevealedHands]   = useState({});
@@ -239,7 +239,7 @@ export default function App() {
 
   // 版本迁移（旧存档搬家）
   useEffect(() => {
-    const OLD_VER = "v722"; const NEW_VER = "v73";
+    const OLD_VER = "v7.3"; const NEW_VER = "v7.3.1";
     const oldMoney = localStorage.getItem(`qw_money_${OLD_VER}`);
     const newMoney = localStorage.getItem(`qw_money_${NEW_VER}`);
     if (oldMoney !== null && newMoney === null) {
@@ -448,7 +448,7 @@ export default function App() {
   // deck 已经是合法 state，可安全加入 deps
   }, [allHands, cheaters, currentTable, roomType, stats, unlockedAchievements, assets, triggerAchievementCheck, addLog, matchHistory]);
 
-  const advancePhase = useCallback((curPot, curChips, curPhase, curFolded, comm, table) => {
+  const advancePhase = useCallback((curPot, curChips, curPhase, curFolded, comm, table, incomingBet = currentBet ) => {
     const bb = roomType === "high" ? 200 : 20;
     const nextPhase = curPhase === "preflop" ? "flop" : curPhase === "flop" ? "turn" : curPhase === "turn" ? "river" : "showdown";
     let aiBets = 0; const newChips = { ...curChips };
@@ -460,16 +460,32 @@ export default function App() {
         addLog(bot.avatar, `${bot.name} ${BOT_ACTIONS.fold[Math.floor(Math.random() * BOT_ACTIONS.fold.length)]}`);
         newFolded[bot.id] = true;
       } else {
-        const strength = Math.min(score / 1500, 1);
-        const betAmt = Math.min(bb * (1 + Math.floor(strength * 5 + Math.random() * 3)), newChips[bot.id] || 0);
-        if (betAmt > 0) {
-          playSound("chip"); newChips[bot.id] -= betAmt; aiBets += betAmt;
-          addLog(bot.avatar, `${bot.name} ${BOT_ACTIONS.bet[Math.floor(Math.random() * BOT_ACTIONS.bet.length)]} ${betAmt}`);
+       const strength = Math.min(score / 1500, 1);
+        const botChips = newChips[bot.id] || 0;
+        
+        // 【核心逻辑】AI 必须跟注的金额：等于你的下注额，但不能超过它自己的筹码
+        const mustCall = Math.min(incomingBet, botChips);
+        
+        // 如果牌特别好 (strength > 0.7)，在跟注基础上额外加注大盲的2倍
+        const extraRaise = (strength > 0.7 && Math.random() > 0.5) ? bb * 2 : 0;
+        const totalBet = Math.min(mustCall + extraRaise, botChips);
+
+        if (totalBet > 0) {
+          playSound("chip");
+          newChips[bot.id] -= totalBet;
+          aiBets += totalBet; // 累加到本轮总下注中
+          
+          // 决定显示什么文案
+          let actionType = totalBet > incomingBet ? "加注到" : "跟注";
+          if (totalBet >= botChips) actionType = "全压！";
+          if (incomingBet === 0 && totalBet === 0) actionType = "过牌";
+          
+          addLog(bot.avatar, `${bot.name} ${actionType} ${totalBet}`);
         } else {
-          addLog(bot.avatar, `${bot.name} ${BOT_ACTIONS.check[Math.floor(Math.random() * BOT_ACTIONS.check.length)]}`);
+          addLog(bot.avatar, `${bot.name} 选择过牌`);
         }
-      }
     });
+setCurrentBet(0); // 这一轮博弈结束了，清空下注标杆，进入下一场（如翻牌转牌）
     const finalPot = curPot + aiBets;
     const newBet = activeBots.length > 0 && aiBets > 0 ? Math.floor(aiBets / activeBots.length) : 0;
     // BUG3修复：AI弃牌后必须同步React folded state。
@@ -546,22 +562,39 @@ export default function App() {
       addLog("📞", `跟注 ${callAmt}`);
       advancePhase(newPot, newChips, phase, newFolded, communityCards, currentTable); return;
     }
-    if (type === "raise") {
+        if (type === "raise") {
       const amt = parseInt(raiseInput, 10);
       if (!amt || amt <= 0) { addLog("⚠️", "请输入有效加注金额"); return; }
       if (amt > myChips)    { addLog("⚠️", "筹码不足"); return; }
       if (amt < bb)         { addLog("⚠️", `最低加注 ${bb}`); return; }
-      newPot += amt; newChips[0] = myChips - amt; setRaiseInput("");
-      addLog("📈", `加注 ${amt}`);
-      advancePhase(newPot, newChips, phase, newFolded, communityCards, currentTable); return;
+      
+      newPot += amt; 
+      newChips[0] = myChips - amt; 
+      setRaiseInput("");
+      
+      // 更新全局标杆金额
+      setCurrentBet(amt); 
+      
+      addLog("📈", `你加注到 ${amt}`);
+      // 将 amt 作为最后一个参数传给 AI 逻辑
+      advancePhase(newPot, newChips, phase, newFolded, communityCards, currentTable, amt); 
+      return;
     }
+
     if (type === "allin") {
       if (myChips <= 0) { addLog("⚠️", "已无筹码"); return; }
-      newPot += myChips; newChips[0] = 0;
-      addLog("💥", `全压！${myChips}`);
-      advancePhase(newPot, newChips, phase, newFolded, communityCards, currentTable); return;
+      const allInAmt = myChips;
+      newPot += allInAmt; 
+      newChips[0] = 0;
+      
+      // 全压也更新标杆金额
+      setCurrentBet(allInAmt); 
+      
+      addLog("💥", `全压！${allInAmt}`);
+      advancePhase(newPot, newChips, phase, newFolded, communityCards, currentTable, allInAmt); 
+      return;
     }
-  };
+
 
   const handleEscape = () => {
     playSound("chip");
