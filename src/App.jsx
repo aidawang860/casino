@@ -506,7 +506,7 @@ const doShowdown = useCallback((finalPot, finalChips, finalFolded, allComm, tabl
     }
   }, [allHands, cheaters, currentTable, roomType, stats, unlockedAchievements, assets, triggerAchievementCheck, addLog, eyePoints, cheatLevel, cheatExp, revealedHands, deck, matchHistory, folded]);
 
-  const executeCheat = (targetId1, targetId2, swapTargetId) => {
+  const executeCheat_Backup = (targetId1, targetId2, swapTargetId) => {
     if (eyePoints < 200) return alert("赌神之眼不足 200！");
     setEyePoints(eyePoints - 200);
 
