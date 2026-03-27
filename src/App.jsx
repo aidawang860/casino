@@ -300,7 +300,6 @@ export default function App() {
   const [stats,                setStats]                = useStickyState(
     { totalWins: 0, highWins: 0, escapeCheats: 0, catchCheats: 0, maxChips: 2000 }, "qw_stats_v73"
   );
-  const [unlockedAchievements, setUnlockedAchievements] = useStickyState([], "qw_achieves_v73");
 
   const [currentTable,   setCurrentTable]   = useState([]);
   const [playerChips,    setPlayerChips]    = useState({});
