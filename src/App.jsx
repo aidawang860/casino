@@ -64,25 +64,12 @@ const NON_GOD_IDS = ACHIEVEMENT_LIST.filter(a => a.id !== "god").map(a => a.id);
 // ==============================
 function useStickyState(defaultValue, key) {
   const [value, setValue] = useState(() => {
-    if (typeof window === "undefined") return defaultValue;
-    try {
-      const stickyValue = window.localStorage.getItem(key);
-      return stickyValue !== null ? JSON.parse(stickyValue) : defaultValue;
-    } catch (e) {
-      console.error(e);
-      return defaultValue;
-    }
+    try { const v = window.localStorage.getItem(key); return v !== null ? JSON.parse(v) : defaultValue; }
+    catch (e) { return defaultValue; }
   });
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(key, JSON.stringify(value));
-    }
-  }, [key, value]);
-
+  useEffect(() => { try { window.localStorage.setItem(key, JSON.stringify(value)); } catch (e) {} }, [key, value]);
   return [value, setValue];
 }
-
 
 let audioCtx = null;
 const playSound = (type) => {
@@ -257,18 +244,6 @@ function Card({ card, hidden, small }) {
 // 3. 主程序
 // ==============================
 export default function App() {
-
-  // --- 插入这几行：负责等级和出千功能 ---
-  const [cheatLevel, setCheatLevel] = useStickyState(1, "qw_cheat_lv_v73");
-  const [cheatExp, setCheatExp] = useStickyState(0, "qw_cheat_exp_v73");
-  const [matchHistory, setMatchHistory] = useStickyState([], "qw_history_v73");
-  const [unlockedAchievements, setUnlockedAchievements] = useStickyState([], "qw_achieves_v73");
-
-  const [revealedHands, setRevealedHands] = useState({}); 
-  const [peekComm, setPeekComm] = useState([]);         
-  const [showCheatModal, setShowCheatModal] = useState(false); 
-  const [showCheatInfo, setShowCheatInfo] = useState(false);   
-
   useEffect(() => {
     const OLD_VER = "v722"; // 你的旧版本号
     const NEW_VER = "v73"; // 你当前正在用的新版本号
@@ -300,6 +275,18 @@ export default function App() {
   const [stats,                setStats]                = useStickyState(
     { totalWins: 0, highWins: 0, escapeCheats: 0, catchCheats: 0, maxChips: 2000 }, "qw_stats_v73"
   );
+  const [unlockedAchievements, setUnlockedAchievements] = useStickyState([], "qw_achieves_v73");
+
+// === 新增：系统核心状态变量 ===
+  const [cheatLevel, setCheatLevel] = useStickyState(1, "qw_cheat_lv_v73");
+  const [cheatExp, setCheatExp] = useStickyState(0, "qw_cheat_exp_v73");
+  const [matchHistory, setMatchHistory] = useStickyState([], "qw_history_v73");
+  
+  // 游戏内状态（无需持久化）
+  const [revealedHands, setRevealedHands] = useState({}); // 记录被透视的玩家ID
+  const [showCheatModal, setShowCheatModal] = useState(false); // 控制出千面板
+  const [showCheatInfo, setShowCheatInfo] = useState(false); // 控制大厅出千说明
+  const [peekComm, setPeekComm] = useState([]); // 记录被透视的未发公牌
 
   const [currentTable,   setCurrentTable]   = useState([]);
   const [playerChips,    setPlayerChips]    = useState({});
