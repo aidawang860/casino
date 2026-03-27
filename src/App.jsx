@@ -636,7 +636,7 @@ export default function App() {
     return (
       <div style={{ minHeight: "100vh", background: "#0a0a0a", color: "#e8d5b0", padding: "15px 10px", fontFamily: "sans-serif", paddingBottom: 50 }}>
         <style>{CSS_ANIMATIONS}</style>
-        <h2 style={{ textAlign: "center", color: "#ffd700", margin: "0 0 15px 0" }}>赌神之路 V7.3</h2>
+        <h2 style={{ textAlign: "center", color: "#ffd700", margin: "0 0 15px 0" }}>赌神之路 V7.3.1</h2>
 
         {/* ══════════════════════════════════════════════
             白屏修复③：原代码把「救济金/钱庄/战绩/出千等级」
@@ -784,10 +784,10 @@ export default function App() {
     phase === "turn"    ? communityCards.slice(0, 4) :
                           communityCards;
 
-  const myChips  = playerChips[0] || 0;
+  const displayChips  = playerChips[0] || 0;
   const canCheck = currentBet === 0;
-  const callAmt  = Math.min(currentBet, myChips);
-  const isBroke  = myChips <= 0;
+  const callAmt  = Math.min(currentBet, displayChips);
+  const isBroke  = displayChips <= 0;
 
   return (
     <div style={{ height: "100vh", background: "#050a05", color: "#e8d5b0", display: "flex", flexDirection: "column", fontFamily: "sans-serif", overflow: "hidden" }}>
@@ -907,7 +907,7 @@ export default function App() {
             <div style={{ fontSize: 11, color: isBroke && winner === null ? "#ef4444" : "#666" }}>
               {isBroke && winner === null ? "⚠️ 筹码耗尽" : "我的筹码"}
             </div>
-            <div style={{ color: isBroke ? "#ef4444" : "#ffd700", fontSize: 18, fontWeight: "bold" }}>🪙 {Math.floor(myChips)}</div>
+            <div style={{ color: isBroke ? "#ef4444" : "#ffd700", fontSize: 18, fontWeight: "bold" }}>🪙 {Math.floor(displayChips)}</div>
           </div>
         </div>
       </div>
@@ -920,7 +920,7 @@ export default function App() {
               {winner === 0 ? "🎉 你赢了！" : winner === -1 ? "😞 弃牌出局" : `☠️ ${currentTable.find(p => p.id === winner)?.name || "对手"} 获胜`}
             </div>
             <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-              {myChips > 0
+              {displayChips > 0
                 ? <button onClick={() => startNewGame()} style={{ flex: 1, padding: "12px", borderRadius: 8, background: "#15803d", color: "#fff", border: "none", fontSize: 16, fontWeight: "bold" }}>🔄 再来一局</button>
                 : <button onClick={() => { setUserChips(0); setView("lobby"); }} style={{ flex: 1, padding: "12px", borderRadius: 8, background: "#7f1d1d", color: "#fff", border: "none", fontSize: 16 }}>💸 破产回大厅</button>
               }
