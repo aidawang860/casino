@@ -1016,22 +1016,23 @@ const doShowdown = useCallback((finalPot, finalChips, finalFolded, allComm, tabl
                 <div style={{ fontSize: 20 }}>{p.avatar} <span style={{ fontSize: 12, color: "#ccc" }}>{p.name}</span></div>
                 <div style={{ fontSize: 10, color: "#888", marginTop: 2, height: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.desc}</div>
                 <div style={{ fontSize: 12, color: "#ffd700", marginTop: 4 }}>🪙 {Math.floor(playerChips[p.id] || 0)}</div>
-                          {/* AI 显牌逻辑修复版 */}
+                                    {/* --- AI 显牌逻辑修复版 --- */}
           <div style={{ display: "flex", gap: 2, justifyContent: "center", marginTop: 6, minHeight: 30 }}>
             {allHands[p.id] && (phase === "showdown" || (revealedHands && revealedHands[p.id])) ? (
               allHands[p.id].map((c, i) => (
                 <Card key={i} card={c} small />
               ))
             ) : (
-              /* 未透视时显示的卡背，确保有占位，不让布局跳动 */
               <>
                 <div style={{ width: 20, height: 28, background: "#991b1b", border: "1px solid #fff", borderRadius: 2 }}></div>
                 <div style={{ width: 20, height: 28, background: "#991b1b", border: "1px solid #fff", borderRadius: 2 }}></div>
               </>
-                </div>
-               );
-             })}
-             </div>
+            )}
+          </div>
+        </div>
+      );
+    })}
+    </div>
 
         {/* 公共牌区 */}
         <div style={{ background: "rgba(255,255,255,0.05)", padding: 10, borderRadius: 8, minHeight: 70, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6 }}>
