@@ -244,27 +244,7 @@ function Card({ card, hidden, small }) {
 // 3. 主程序
 // ==============================
 export default function App() {
-  useEffect(() => {
-    const OLD_VER = "v722"; // 你的旧版本号
-    const NEW_VER = "v73"; // 你当前正在用的新版本号
-    
-    const oldMoney = localStorage.getItem(`qw_money_${OLD_VER}`);
-    const newMoney = localStorage.getItem(`qw_money_${NEW_VER}`);
 
-    // 只有当“发现旧钱”且“新家还没钱”时，才进行搬家
-    if (oldMoney !== null && newMoney === null) {
-      const keys = ["money", "userChips", "eyePoints", "assets", "stats", "achieves"];
-      keys.forEach(key => {
-        const val = localStorage.getItem(`qw_${key}_${OLD_VER}`);
-        if (val !== null) {
-          localStorage.setItem(`qw_${key}_${NEW_VER}`, val);
-        }
-      });
-      // 搬完家后刷新页面，让 useStickyState 重新加载新 Key 的值
-      window.location.reload();
-    }
-  }, []);
-   
   const [view,     setView]     = useState("lobby");
   const [roomType, setRoomType] = useState("low");
 
@@ -301,6 +281,28 @@ export default function App() {
   const [log,            setLog]            = useState([]);
   const [currentBet,     setCurrentBet]     = useState(0);
   const [raiseInput,     setRaiseInput]     = useState("");
+
+  useEffect(() => {
+    const OLD_VER = "v722"; // 你的旧版本号
+    const NEW_VER = "v73"; // 你当前正在用的新版本号
+    
+    const oldMoney = localStorage.getItem(`qw_money_${OLD_VER}`);
+    const newMoney = localStorage.getItem(`qw_money_${NEW_VER}`);
+
+    // 只有当“发现旧钱”且“新家还没钱”时，才进行搬家
+    if (oldMoney !== null && newMoney === null) {
+      const keys = ["money", "userChips", "eyePoints", "assets", "stats", "achieves"];
+      keys.forEach(key => {
+        const val = localStorage.getItem(`qw_${key}_${OLD_VER}`);
+        if (val !== null) {
+          localStorage.setItem(`qw_${key}_${NEW_VER}`, val);
+        }
+      });
+      // 搬完家后刷新页面，让 useStickyState 重新加载新 Key 的值
+    }
+  }, []);
+   
+  
 
   const logRef = useRef(null);
   useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, [log]);
