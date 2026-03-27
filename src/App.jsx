@@ -480,12 +480,14 @@ export default function App() {
           if (totalBet >= botChips) actionType = "全压！";
           if (incomingBet === 0 && totalBet === 0) actionType = "过牌";
           
-          addLog(bot.avatar, `${bot.name} ${actionType} ${totalBet}`);
-            } else {
-      addLog(bot.avatar, `${bot.name} 选择过牌`);
-  });
+                  addLog(bot.avatar, `${bot.name} ${actionType} ${totalBet}`);
+      } else {
+        addLog(bot.avatar, `${bot.name} 选择过牌`);
+      }
+    });
 
-setCurrentBet(0); // 这一轮博弈结束了，清空下注标杆，进入下一场（如翻牌转牌）
+    setCurrentBet(0);
+
     const finalPot = curPot + aiBets;
     const newBet = activeBots.length > 0 && aiBets > 0 ? Math.floor(aiBets / activeBots.length) : 0;
     // BUG3修复：AI弃牌后必须同步React folded state。
