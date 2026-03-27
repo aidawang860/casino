@@ -479,7 +479,6 @@ export default function App() {
         }
       }
     });
-
     setCurrentBet(0);
 
     const finalPot = curPot + aiBets;
@@ -961,4 +960,5 @@ export default function App() {
       </div>
     </div>
   );
+}
 }
