@@ -1,5 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 
+// --- 自定义 Hook: 带本地存储的状态 ---
+function useStickyState(defaultValue, key) {
+  const [value, setValue] = React.useState(() => {
+    const stickyValue = window.localStorage.getItem(key);
+    return stickyValue !== null ? JSON.parse(stickyValue) : defaultValue;
+  });
+  React.useEffect(() => {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  }, [key, value]);
+  return [value, setValue];
+}
+
 // ==============================
 // 1. 基础配置与核心数据
 // ==============================
