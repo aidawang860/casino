@@ -204,29 +204,21 @@ export default function App() {
     { totalWins: 0, highWins: 0, escapeCheats: 0, catchCheats: 0, maxChips: 2000 }, "qw_stats_v7.3.1"
   );
   const [unlockedAchievements, setUnlockedAchievements] = useStickyState([], "qw_achieves_v7.3.1");
-  const [cheatLevel,  setCheatLevel]  = useStickyState(1,  "qw_cheat_lv_v7.3.1");
-  const [cheatExp,    setCheatExp]    = useStickyState(0,  "qw_cheat_exp_v7.3.1");
-  const [matchHistory,setMatchHistory]= useStickyState([], "qw_history_v7.3.1");
+  const [cheatLevel,   setCheatLevel]  = useStickyState(1,  "qw_cheat_lv_v7.3.1");
+  const [cheatExp,     setCheatExp]    = useStickyState(0,  "qw_cheat_exp_v7.3.1");
+  const [matchHistory, setMatchHistory]= useStickyState([], "qw_history_v7.3.1");
 
   // ── 游戏内状态 ──
-  const [revealedHands,   setRevealedHands]   = useState({});
-  const [showCheatModal,  setShowCheatModal]   = useState(false);
-  const [showCheatInfo,   setShowCheatInfo]    = useState(false);
-  const [peekComm,        setPeekComm]         = useState([]);
+  const [revealedHands,  setRevealedHands]  = useState({});
+  const [showCheatModal, setShowCheatModal] = useState(false);
+  const [showCheatInfo,  setShowCheatInfo]  = useState(false);
+  const [peekComm,       setPeekComm]       = useState([]);
 
   const [currentTable,   setCurrentTable]   = useState([]);
   const [playerChips,    setPlayerChips]    = useState({});
   const [allHands,       setAllHands]       = useState({});
   const [communityCards, setCommunityCards] = useState([]);
-  // ══════════════════════════════════════════════════════
-  // 白屏修复①：deck 必须是 React state。
-  // 原代码中 deck 只在 startNewGame 内部作为局部变量存在，
-  // 但 doShowdown 的 useCallback deps 数组和 executeCheat 函数
-  // 都直接引用了 deck，导致组件挂载时立即抛出
-  // ReferenceError: deck is not defined → 整棵组件树崩溃 → 白屏。
-  // ══════════════════════════════════════════════════════
   const [deck,           setDeck]           = useState([]);
-
   const [pot,            setPot]            = useState(0);
   const [phase,          setPhase]          = useState("preflop");
   const [folded,         setFolded]         = useState({});
@@ -237,7 +229,7 @@ export default function App() {
   const [currentBet,     setCurrentBet]     = useState(0);
   const [raiseInput,     setRaiseInput]     = useState("");
 
-  // 版本迁移（旧存档搬家）
+  // 版本迁移
   useEffect(() => {
     const OLD_VER = "v7.3"; const NEW_VER = "v7.3.1";
     const oldMoney = localStorage.getItem(`qw_money_${OLD_VER}`);
@@ -314,8 +306,6 @@ export default function App() {
   };
 
   const entertain = () => {
-    // BUG1修复：消遣费用应为20筹码，原代码错误写成100
-    // BUG2修复：神眼已满200时直接拦截，不消耗筹码
     if (eyePoints >= 200) { alert("赌神之眼已满！"); return; }
     playSound("deal");
     const cost = 20;
@@ -345,8 +335,6 @@ export default function App() {
     setRevealedHands({}); setPeekComm([]);
     playSound("deal");
     const isHigh = type === "high";
-
-    // 白屏修复①配套：用 newDeck 作局部变量名，避免遮蔽同名 state
     const newDeck = createDeck();
     const hands = {};
     const botIds = table.filter(p => !p.isUser).map(p => p.id);
@@ -358,7 +346,7 @@ export default function App() {
     table.forEach(p => { hands[p.id] = newDeck.splice(0, 2); });
     setAllHands(hands);
     setCommunityCards(newDeck.splice(0, 5));
-    setDeck([...newDeck]); // 保存剩余牌堆到 state，供 executeCheat 使用
+    setDeck([...newDeck]);
     setCheaters(gang); setIsExposed(false);
     const bb = isHigh ? 200 : 20;
     setPot(bb * 2); setCurrentBet(bb); setPhase("preflop");
@@ -367,13 +355,6 @@ export default function App() {
     if (rigged && eyePoints >= 100) { setEyePoints(e => e - 100); setIsExposed(true); addLog("👁️", "【警告】检测到老千局！"); }
   };
 
-  // ══════════════════════════════════════════════════
-  // 白屏修复②：doShowdown 内部有一个错误的双层 if(userWon)。
-  // 原代码结构：if(userWon){ ... if(userWon){ 赢 } else { 输 } }
-  // 由于外层已保证 userWon===true，内层 else（输的逻辑）
-  // 永远无法执行，导致玩家输了 setWinner 从未被调用，
-  // winner 永远是 null，牌局永远无法结束。已改为正确的 if/else。
-  // ══════════════════════════════════════════════════
   const doShowdown = useCallback((finalPot, finalChips, finalFolded, allComm, table) => {
     const fd = finalFolded || {};
     const currentTab = table || currentTable;
@@ -382,16 +363,12 @@ export default function App() {
     const AI_WIN_TAUNTS  = ["就这点本事也敢All-in？", "你的筹码我笑纳了！", "回家再练十年吧！", "看清楚了，这才叫德州扑克。"];
     const AI_LOSE_TAUNTS = ["今天手气真差...", "算你走运！", "你是不是出老千了？！", "别得意，下一局连本带利赢回来！"];
 
-    // BUG5修复：原代码用 -1 标记老千局玩家得分，但 maxScore 初始值也是 -1。
-    // 若玩家是唯一未弃牌者，所有 AI 都弃牌，maxScore 保持 -1，
-    // 玩家 score(-1) === maxScore(-1) → 玩家错误赢得老千局。
-    // 修复：改用 -Infinity 作为初始最大值，-1 作为玩家弃权分不再产生歧义。
     let maxScore = -Infinity;
     const scores = {};
     currentTab.forEach(pl => {
       if (fd[pl.id]) return;
       let s = evaluateHand(allHands[pl.id], allComm);
-      if (isRigged && pl.id === 0) s = -1; // -1 在任何真实手牌分(≥1)面前都会落败
+      if (isRigged && pl.id === 0) s = -1;
       scores[pl.id] = s;
       if (s > maxScore) maxScore = s;
     });
@@ -406,8 +383,8 @@ export default function App() {
     winners.forEach(w => { newChips[w.id] = (newChips[w.id] || 0) + splitAmount; });
     setPlayerChips(newChips);
 
-    const userWon  = winners.some(w => w.id === 0);
-    const isSplit  = winners.length > 1;
+    const userWon = winners.some(w => w.id === 0);
+    const isSplit = winners.length > 1;
 
     if (userWon) {
       playSound("win");
@@ -431,7 +408,6 @@ export default function App() {
           addLog("💬", `${loser.name}: "${AI_LOSE_TAUNTS[Math.floor(Math.random() * AI_LOSE_TAUNTS.length)]}"`);
       }
     } else {
-      // 原代码此分支因双层 if(userWon) 永远无法到达，已修复
       playSound("deal");
       const winnerPlayer = winners[0];
       setWinner(winnerPlayer.id);
@@ -445,11 +421,11 @@ export default function App() {
           addLog("💬", `${winnerPlayer.name}: "${AI_WIN_TAUNTS[Math.floor(Math.random() * AI_WIN_TAUNTS.length)]}"`);
       }
     }
-  // deck 已经是合法 state，可安全加入 deps
   }, [allHands, cheaters, currentTable, roomType, stats, unlockedAchievements, assets, triggerAchievementCheck, addLog, matchHistory]);
 
-  const advancePhase = useCallback((curPot, curChips, curPhase, curFolded, comm, table, incomingBet = currentBet ) => {
+  const advancePhase = useCallback((curPot, curChips, curPhase, curFolded, comm, table, incomingBet) => {
     const bb = roomType === "high" ? 200 : 20;
+    const bet = incomingBet !== undefined ? incomingBet : currentBet;
     const nextPhase = curPhase === "preflop" ? "flop" : curPhase === "flop" ? "turn" : curPhase === "turn" ? "river" : "showdown";
     let aiBets = 0; const newChips = { ...curChips };
     const activeBots = (table || currentTable).filter(p => !p.isUser && !curFolded[p.id]);
@@ -459,33 +435,24 @@ export default function App() {
       if (Math.random() < 0.2) {
         addLog(bot.avatar, `${bot.name} ${BOT_ACTIONS.fold[Math.floor(Math.random() * BOT_ACTIONS.fold.length)]}`);
         newFolded[bot.id] = true;
-} else {
+      } else {
         const strength = Math.min(score / 1500, 1);
         const botChips = newChips[bot.id] || 0;
-        const mustCall = Math.min(incomingBet, botChips);
+        const mustCall = Math.min(bet, botChips);
         const extraRaise = (strength > 0.7 && Math.random() > 0.5) ? bb * 2 : 0;
         const totalBet = Math.min(mustCall + extraRaise, botChips);
-
         if (totalBet > 0) {
-          playSound("chip");
-          newChips[bot.id] -= totalBet;
-          aiBets += totalBet;
-          let actionType = totalBet > incomingBet ? "加注到" : "跟注";
+          playSound("chip"); newChips[bot.id] -= totalBet; aiBets += totalBet;
+          let actionType = totalBet > bet ? "加注到" : "跟注";
           if (totalBet >= botChips) actionType = "全压！";
-          if (incomingBet === 0 && totalBet === 0) actionType = "过牌";
           addLog(bot.avatar, `${bot.name} ${actionType} ${totalBet}`);
         } else {
           addLog(bot.avatar, `${bot.name} 选择过牌`);
         }
       }
     });
-    setCurrentBet(0);
-
     const finalPot = curPot + aiBets;
     const newBet = activeBots.length > 0 && aiBets > 0 ? Math.floor(aiBets / activeBots.length) : 0;
-    // BUG3修复：AI弃牌后必须同步React folded state。
-    // 原代码只更新了局部变量 newFolded，未调用 setFolded。
-    // 导致玩家下次操作时从 folded state 读到旧值，已弃牌AI重新参与下注。
     setFolded(newFolded);
     if (nextPhase === "showdown") {
       setPot(finalPot); setPlayerChips(newChips);
@@ -506,9 +473,9 @@ export default function App() {
     while (newLv < 10 && newExp >= req) { newExp -= req; newLv++; req = Math.pow(10, newLv); alert(`🎉 突破！出千等级升至 Lv.${newLv}`); }
     setCheatExp(newExp); setCheatLevel(newLv);
 
-    const nextHands   = { ...allHands };
+    const nextHands    = { ...allHands };
     const nextRevealed = { ...revealedHands };
-    const nextDeck    = [...deck]; // deck 现在是合法 state，不再报错
+    const nextDeck     = [...deck];
 
     const activeOpponents = currentTable.filter(p => p.id !== 0 && !folded[p.id]);
     const t1 = targetId1 || activeOpponents[0]?.id;
@@ -557,39 +524,25 @@ export default function App() {
       addLog("📞", `跟注 ${callAmt}`);
       advancePhase(newPot, newChips, phase, newFolded, communityCards, currentTable); return;
     }
-        if (type === "raise") {
+    if (type === "raise") {
       const amt = parseInt(raiseInput, 10);
       if (!amt || amt <= 0) { addLog("⚠️", "请输入有效加注金额"); return; }
       if (amt > myChips)    { addLog("⚠️", "筹码不足"); return; }
       if (amt < bb)         { addLog("⚠️", `最低加注 ${bb}`); return; }
-      
-      newPot += amt; 
-      newChips[0] = myChips - amt; 
-      setRaiseInput("");
-      
-      // 更新全局标杆金额
-      setCurrentBet(amt); 
-      
+      newPot += amt; newChips[0] = myChips - amt; setRaiseInput("");
       addLog("📈", `你加注到 ${amt}`);
-      // 将 amt 作为最后一个参数传给 AI 逻辑
-      advancePhase(newPot, newChips, phase, newFolded, communityCards, currentTable, amt); 
-      return;
+      advancePhase(newPot, newChips, phase, newFolded, communityCards, currentTable, amt); return;
     }
-
     if (type === "allin") {
       if (myChips <= 0) { addLog("⚠️", "已无筹码"); return; }
       const allInAmt = myChips;
-      newPot += allInAmt; 
-      newChips[0] = 0;
-      
-      // 全压也更新标杆金额
-      setCurrentBet(allInAmt); 
-      
+      newPot += allInAmt; newChips[0] = 0;
       addLog("💥", `全压！${allInAmt}`);
-      advancePhase(newPot, newChips, phase, newFolded, communityCards, currentTable, allInAmt); 
-      return;
+      advancePhase(newPot, newChips, phase, newFolded, communityCards, currentTable, allInAmt); return;
     }
-
+  };
+  // ↑ handleAction 正确闭合于此。原代码此处缺少 }; 导致后面所有函数和渲染代码
+  //   全部嵌套在 handleAction 内部，组件结构崩溃，Vercel 白屏。
 
   const handleEscape = () => {
     playSound("chip");
@@ -638,15 +591,7 @@ export default function App() {
         <style>{CSS_ANIMATIONS}</style>
         <h2 style={{ textAlign: "center", color: "#ffd700", margin: "0 0 15px 0" }}>赌神之路 V7.3.1</h2>
 
-        {/* ══════════════════════════════════════════════
-            白屏修复③：原代码把「救济金/钱庄/战绩/出千等级」
-            全部嵌套进了「资产栏」的 flex 容器里，导致 JSX
-            结构混乱，React 解析时报错崩溃。
-            现已将资产栏（存款|筹码|神眼）单独抽出，
-            其余模块放在它的后面，结构清晰。
-        ══════════════════════════════════════════════ */}
-
-        {/* 资产栏：仅显示 存款 / 筹码 / 神眼 */}
+        {/* 资产栏 */}
         <div style={{ display: "flex", justifyContent: "space-between", background: "#1a1a1a", padding: 12, borderRadius: 8, marginBottom: 15 }}>
           <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: 12, color: "#888" }}>存款</div>
@@ -662,7 +607,7 @@ export default function App() {
           </div>
         </div>
 
-{/* 救济金 */}
+        {/* 救济金 */}
         {money === 0 && userChips === 0 && (
           <button
             onClick={() => { setMoney(10000); alert("基金会发放了 10,000 救济金！"); }}
@@ -695,7 +640,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* 出千等级 */}
+{/* 出千等级 */}
         <div style={{ background: "#2e1065", padding: 12, borderRadius: 8, marginBottom: 15, border: "1px solid #5b21b6" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
             <span style={{ color: "#ddd6fe", fontWeight: "bold", fontSize: 14 }}>👁️ 千术: Lv.{cheatLevel}</span>
@@ -784,7 +729,7 @@ export default function App() {
     phase === "turn"    ? communityCards.slice(0, 4) :
                           communityCards;
 
-  const displayChips  = playerChips[0] || 0;
+  const displayChips = playerChips[0] || 0;
   const canCheck = currentBet === 0;
   const callAmt  = Math.min(currentBet, displayChips);
   const isBroke  = displayChips <= 0;
@@ -950,7 +895,7 @@ export default function App() {
               <input
                 type="number" value={raiseInput} onChange={e => setRaiseInput(e.target.value)}
                 placeholder={`加注(≥${roomType === "high" ? 200 : 20})`}
-                style={{ flex: 1.5, padding: "10px 8px", borderRadius: 8, background: "#1a1a1a", color: "#fff", border: "1px solid #555", fontSize:13, minWidth: 0 }}
+                style={{ flex: 1.5, padding: "10px 8px", borderRadius: 8, background: "#1a1a1a", color: "#fff", border: "1px solid #555", fontSize: 13, minWidth: 0 }}
               />
               <button onClick={() => handleAction("raise")} style={{ flex: 1, padding: "10px 0", borderRadius: 8, background: "#78350f", color: "#fcd34d", border: "1px solid #92400e", fontSize: 14, fontWeight: "bold" }}>📈 加注</button>
               <button onClick={() => handleAction("allin")} style={{ flex: 1, padding: "10px 0", borderRadius: 8, background: "#4c1d95", color: "#ddd6fe", border: "1px solid #6d28d9", fontSize: 14, fontWeight: "bold" }}>💥 全压</button>
@@ -960,5 +905,4 @@ export default function App() {
       </div>
     </div>
   );
-}
 }
