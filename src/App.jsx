@@ -283,10 +283,11 @@ export default function App() {
   const [matchHistory, setMatchHistory] = useStickyState([], "qw_history_v73");
   
   // 游戏内状态（无需持久化）
+   // === 游戏内状态 (无需持久化) ===
   const [revealedHands, setRevealedHands] = useState({}); // 记录被透视的玩家ID
+  const [peekComm, setPeekComm] = useState([]);         // 记录被透视的未发公牌
   const [showCheatModal, setShowCheatModal] = useState(false); // 控制出千面板
-  const [showCheatInfo, setShowCheatInfo] = useState(false); // 控制大厅出千说明
-  const [peekComm, setPeekComm] = useState([]); // 记录被透视的未发公牌
+  const [showCheatInfo, setShowCheatInfo] = useState(false);   // 控制大厅出千说明
 
   const [currentTable,   setCurrentTable]   = useState([]);
   const [playerChips,    setPlayerChips]    = useState({});
