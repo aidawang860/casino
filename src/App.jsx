@@ -406,7 +406,12 @@ export default function App() {
     const scores = {};
     currentTab.forEach(pl => {
       if (fd[pl.id]) return;
-      let s = evaluateHand(allHands[pl.id], allComm);
+      const result = evaluateHand(allHands[pl.id], allComm);
+
+      let s = result.score;
+     
+      pl.handName = result.name;
+
       if (isRigged && pl.id === 0) s = -1;
       scores[pl.id] = s;
       if (s > maxScore) maxScore = s;
@@ -440,7 +445,7 @@ export default function App() {
         addLog("🤝", `平局！与 ${others} 平分底池，拿回 ${splitAmount}`);
         setMatchHistory(p => [{ res: "平", type: roomType, pot: finalPot }, ...p].slice(0, 5));
       } else {
-        addLog("🎉", `独揽 ${finalPot}`);
+        addLog("🎉", `独揽 ${finalPot}！你的【${currentTab.find(p => p.id === 0).handName}】大获全胜`);
         setMatchHistory(p => [{ res: "赢", type: roomType, pot: finalPot }, ...p].slice(0, 5));
         const loser = currentTab.find(p => p.id !== 0 && !fd[p.id]);
         if (loser && Math.random() > 0.4)
@@ -454,7 +459,10 @@ export default function App() {
         addLog("🤝", "对手之间平局，平分底池");
         setMatchHistory(p => [{ res: "平", type: roomType, pot: finalPot }, ...p].slice(0, 5));
       } else {
-        addLog(fd[0] ? "😞" : "☠️", fd[0] ? "你已弃牌" : "败北");
+        addLog(fd[0] ? "😒" : "☠️", 
+  fd[0] ? "你已弃牌" : `败北！对方是【${winnerPlayer.handName}】，你是【${currentTab.find(p => p.id === 0).handName}】`
+);
+
         setMatchHistory(p => [{ res: "输", type: roomType, pot: finalPot }, ...p].slice(0, 5));
         if (!fd[0] && Math.random() > 0.4)
           addLog("💬", `${winnerPlayer.name}: "${AI_WIN_TAUNTS[Math.floor(Math.random() * AI_WIN_TAUNTS.length)]}"`);
