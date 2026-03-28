@@ -102,66 +102,105 @@ function createDeck() {
   return d.sort(() => Math.random() - 0.5);
 }
 
-function evaluateHand(hand, comm) {
-  if (!hand || hand.length === 0) return 0;
-  const allCards = [...hand, ...comm];
-  const cards = allCards.map(c => ({ ...c, val: RANKS.indexOf(c.rank) + 2 })).sort((a, b) => b.val - a.val);
-  const rankCounts = {}; const suitCards = {};
-  cards.forEach(c => {
-    rankCounts[c.val] = (rankCounts[c.val] || 0) + 1;
-    if (!suitCards[c.suit]) suitCards[c.suit] = [];
-    suitCards[c.suit].push(c);
-  });
-  let flushCards = null; let flushSuitCards = null;
-  for (const suit in suitCards) {
-    if (suitCards[suit].length >= 5) { flushSuitCards = suitCards[suit]; flushCards = suitCards[suit].slice(0, 5); break; }
-  }
-  function getStraight(cardArray) {
-    const uniqueVals = [...new Set(cardArray.map(c => c.val))].sort((a, b) => b - a);
-    if (uniqueVals.includes(14)) uniqueVals.push(1);
-    for (let i = 0; i <= uniqueVals.length - 5; i++) {
-      if (uniqueVals[i] - uniqueVals[i + 4] === 4) return uniqueVals.slice(i, i + 5);
+  const evaluateHand = (hand, comm) => {
+    // 1. 组合手牌与公共牌，并转换点数为数字 (2-14)
+    const cards = [...hand, ...comm].map(c => ({
+      ...c,
+      val: RANKS.indexOf(c.rank) + 2
+    })).sort((a, b) => b.val - a.val);
+
+    // 2. 统计点数频率和花色分组
+    const rankCounts = {};
+    const suitGroups = { '♠': [], '♣': [], '♥': [], '♦': [] };
+    cards.forEach(c => {
+      rankCounts[c.val] = (rankCounts[c.val] || 0) + 1;
+      if (suitGroups[c.suit]) suitGroups[c.suit].push(c);
+    });
+
+    // 3. 判定同花 (Flush)
+    const flushSuit = Object.keys(suitGroups).find(s => suitGroups[s].length >= 5);
+    const flushCards = flushSuit ? suitGroups[flushSuit].slice(0, 5) : null;
+
+    // 4. 判定顺子 (Straight) - 包含 A2345 特殊判定
+    const getStraight = (cardList) => {
+      const uniqueVals = [...new Set(cardList.map(c => c.val))].sort((a, b) => b - a);
+      if (uniqueVals.includes(14)) uniqueVals.push(1); // A当1用
+      for (let i = 0; i <= uniqueVals.length - 5; i++) {
+        if (uniqueVals[i] - uniqueVals[i + 4] === 4) return uniqueVals.slice(i, i + 5);
+      }
+      return null;
+    };
+    const straightVals = getStraight(cards);
+    const straightFlushVals = flushCards ? getStraight(flushCards) : null;
+
+    // 5. 频率分组 (处理四条、葫芦、三条、对子)
+    const groups = Object.entries(rankCounts)
+      .map(([val, count]) => ({ val: parseInt(val), count }))
+      .sort((a, b) => b.count !== a.count ? b.count - a.count : b.val - a.val);
+
+    // 6. 权重分值计算 (确保踢脚牌 Kicker 判定准确)
+    const calcScore = (level, best5) => {
+      let score = level * Math.pow(16, 5);
+      best5.forEach((card, i) => {
+        const v = typeof card === 'object' ? card.val : card;
+        // 特殊处理 A2345 顺子：A 的权重在这种情况下降为 1
+        const finalV = (level === 5 || level === 9) && i === 0 && v === 14 && best5[1] === 5 ? 5 : v;
+        score += finalV * Math.pow(16, 4 - i);
+      });
+      return score;
+    };
+
+    // --- 7. 最终判定逻辑树 ---
+    
+    // 皇家同花顺 & 同花顺
+    if (straightFlushVals) {
+      const isRoyal = straightFlushVals[0] === 14 && straightFlushVals[1] === 13;
+      return { score: calcScore(isRoyal ? 10 : 9, straightFlushVals), name: isRoyal ? "皇家同花顺" : "同花顺" };
     }
-    return null;
-  }
-  const straightVals = getStraight(cards);
-  const straightFlushVals = flushSuitCards ? getStraight(flushSuitCards) : null;
-  const groups = Object.entries(rankCounts)
-    .map(([val, count]) => ({ val: Number(val), count }))
-    .sort((a, b) => b.count !== a.count ? b.count - a.count : b.val - a.val);
-  function calcScore(category, best5) {
-    let score = category * 1048576;
-    for (let i = 0; i < 5; i++) {
-      const item = best5[i];
-      const val = item ? (typeof item === "object" ? item.val : item) : 0;
-      score += val * Math.pow(16, 4 - i);
+    
+    // 四条
+    if (groups[0].count === 4) {
+      const kicker = cards.find(c => c.val !== groups[0].val);
+      return { score: calcScore(8, [groups[0].val, groups[0].val, groups[0].val, groups[0].val, kicker.val]), name: "四条" };
     }
-    return score;
-  }
-  if (straightFlushVals && straightFlushVals[0] === 14) return calcScore(10, straightFlushVals);
-  if (straightFlushVals) return calcScore(9, straightFlushVals);
-  if (groups[0].count === 4) {
-    const kicker = cards.find(c => c.val !== groups[0].val);
-    return calcScore(8, [groups[0].val, groups[0].val, groups[0].val, groups[0].val, kicker]);
-  }
-  if (groups[0].count === 3 && groups.length > 1 && groups[1].count >= 2)
-    return calcScore(7, [groups[0].val, groups[0].val, groups[0].val, groups[1].val, groups[1].val]);
-  if (flushCards) return calcScore(6, flushCards);
-  if (straightVals) return calcScore(5, straightVals);
-  if (groups[0].count === 3) {
-    const kickers = cards.filter(c => c.val !== groups[0].val).slice(0, 2);
-    return calcScore(4, [groups[0].val, groups[0].val, groups[0].val, kickers[0], kickers[1]]);
-  }
-  if (groups[0].count === 2 && groups.length > 1 && groups[1].count === 2) {
-    const kicker = cards.find(c => c.val !== groups[0].val && c.val !== groups[1].val);
-    return calcScore(3, [groups[0].val, groups[0].val, groups[1].val, groups[1].val, kicker]);
-  }
-  if (groups[0].count === 2) {
-    const kickers = cards.filter(c => c.val !== groups[0].val).slice(0, 3);
-    return calcScore(2, [groups[0].val, groups[0].val, kickers[0], kickers[1], kickers[2]]);
-  }
-  return calcScore(1, cards.slice(0, 5));
-}
+    
+    // 葫芦 (注意：如果7张里有三条+两对，取最高的三条和最高的对子)
+    if (groups[0].count === 3 && groups.length > 1 && groups[1].count >= 2) {
+      return { score: calcScore(7, [groups[0].val, groups[0].val, groups[0].val, groups[1].val, groups[1].val]), name: "葫芦" };
+    }
+    
+    // 同花
+    if (flushCards) {
+      return { score: calcScore(6, flushCards.map(c => c.val)), name: "同花" };
+    }
+    
+    // 顺子
+    if (straightVals) {
+      return { score: calcScore(5, straightVals), name: "顺子" };
+    }
+    
+    // 三条
+    if (groups[0].count === 3) {
+      const kickers = cards.filter(c => c.val !== groups[0].val).slice(0, 2).map(c => c.val);
+      return { score: calcScore(4, [groups[0].val, groups[0].val, groups[0].val, ...kickers]), name: "三条" };
+    }
+    
+    // 两对
+    if (groups[0].count === 2 && groups.length > 1 && groups[1].count === 2) {
+      const kicker = cards.find(c => c.val !== groups[0].val && c.val !== groups[1].val);
+      return { score: calcScore(3, [groups[0].val, groups[0].val, groups[1].val, groups[1].val, kicker.val]), name: "两对" };
+    }
+    
+    // 一对
+    if (groups[0].count === 2) {
+      const kickers = cards.filter(c => c.val !== groups[0].val).slice(0, 3).map(c => c.val);
+      return { score: calcScore(2, [groups[0].val, groups[0].val, ...kickers]), name: "一对" };
+    }
+    
+    // 高牌
+    return { score: calcScore(1, cards.slice(0, 5).map(c => c.val)), name: "高牌" };
+  };
+
 
 const PHASE_NAMES = { preflop: "翻牌前", flop: "翻牌", turn: "转牌", river: "河牌", showdown: "摊牌" };
 
