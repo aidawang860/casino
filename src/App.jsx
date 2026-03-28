@@ -411,8 +411,6 @@ export default function App() {
       let s = result.score;
      
       pl.handName = result.name;
-
-      if (isRigged && pl.id === 0) s = -1;
       scores[pl.id] = s;
       if (s > maxScore) maxScore = s;
     });
